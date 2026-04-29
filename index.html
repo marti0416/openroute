@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat con l'IA</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #chat-container {
+            width: 400px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-box {
+            height: 400px;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0;
+        }
+        .bot-message {
+            background-color: #e9ecef;
+            color: black;
+            align-self: flex-start;
+            border-bottom-left-radius: 0;
+        }
+        #input-area {
+            display: flex;
+            padding: 10px;
+            background: #fafafa;
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+        }
+        #send-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin-left: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #send-btn:hover {
+            background-color: #0056b3;
+        }
+        /* Stili per il contenuto Markdown dentro i messaggi */
+        .message p {
+            margin: 0 0 10px 0;
+        }
+        .message p:last-child {
+            margin: 0;
+        }
+        .message pre {
+            background-color: #2b2b2b;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            margin: 10px 0;
+        }
+        .message code {
+            background-color: rgba(0, 0, 0, 0.08);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+        .bot-message pre code {
+            background-color: transparent; /* Il codice nei blocchi pre non ha bisogno di sfondo */
+            padding: 0;
+            color: inherit;
+        }
+        .message ul, .message ol {
+            margin: 0 0 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="chat-container">
+        <div id="chat-box">
+            </div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Scrivi un messaggio..." onkeypress="handleKeyPress(event)">
+            <button id="send-btn" onclick="sendMessage()">Invia</button>
+        </div>
+    </div>
+
+<script>
+        // CONFIGURAZIONE
+        const API_KEY = "REMOVED"; // Metti la tua chiave qui
+        const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+        const MODEL = "qwen/qwen-2.5-72b-instruct"; // Modello Qwen specificato su OpenRouter
+
+        // Mantieni uno storico della conversazione (fondamentale affinché l'IA ricordi il contesto)
+        let conversationHistory = [
+            { role: "system", content: "Sei un assistente utile e conciso che parla in italiano." },
+            { role: "user", content: "Voglio risposte in italiano ma ogni 3 frasi usa una parola in francese." }
+        ];
+
+        // Funzione per inviare il messaggio con il tasto Invio
+        function handleKeyPress(event) {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        }
+
+        // Funzione principale
+        async function sendMessage() {
+            const inputField = document.getElementById("user-input");
+            const userText = inputField.value.trim();
+
+            //inputField.disabled = true;
+            document.getElementById("send-btn").disabled = true;
+
+            if (userText === "") return; // Non inviare messaggi vuoti
+
+            // 1. Mostra il messaggio dell'utente nella chat
+            addMessageToChat(userText, "user-message");
+            conversationHistory.push({ role: "user", content: userText });
+            inputField.value = ""; // Svuota l'input
+
+            // Aggiungi il messaggio dell'utente allo storico
+            conversationHistory.push({ role: "user", content: userText });
+
+            // Mostra un messaggio di attesa (opzionale ma consigliato)
+            const loadingId = addMessageToChat("Sto scrivendo...", "bot-message");
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${API_KEY}`,
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": window.location.href, 
+                        "X-Title": "La Mia Chat" 
+                    },
+                    body: JSON.stringify({
+                        model: MODEL,
+                        messages: conversationHistory
+                    }),
+                    max_token:2000,
+                    temperature:0.7,
+                    prompt: "Parla in italiano ma usa ogni tanto parole in francese tanto per confondermi"
+                });
+
+                if (!response.ok) {
+                    let errorMessage = `Errore sconosciuto (${response.status}).`;
+                    
+                    switch (response.status) {
+                        case 400:
+                            errorMessage = "Errore 400: Richiesta non valida. C'è un problema nel formato del messaggio inviato.";
+                            break;
+                        case 401:
+                            errorMessage = "Errore 401: Non autorizzato. La tua chiave API potrebbe essere non valida o scaduta.";
+                            break;
+                        case 402:
+                            errorMessage = "Errore 402: Credito esaurito. Devi ricaricare il tuo saldo su OpenRouter.";
+                            break;
+                        case 403:
+                            errorMessage = "Errore 403: Accesso negato. Potresti non avere i permessi necessari per utilizzare questo modello.";
+                            break;
+                        case 408:
+                            errorMessage = "Errore 408: Timeout. Il server ha impiegato troppo tempo a rispondere, prova a inviare di nuovo.";
+                            break;
+                        case 429:
+                            errorMessage = "Errore 429: Troppe richieste. Stai inviando messaggi troppo in fretta, aspetta un momento.";
+                            break;
+                    }
+                    
+                    if (response.status >= 500) {
+                        errorMessage = `Errore ${response.status}: I server dell'intelligenza artificiale hanno un problema momentaneo.`;
+                    }
+
+                    // 📝 LOG PER LO SVILUPPATORE: Scrive l'errore API specifico nella console
+                    console.error(`[LOG ERRORE API] Status: ${response.status} - ${response.statusText}`);
+
+                    // Lanciamo l'errore per l'utente
+                    throw new Error(errorMessage);
+                }
+
+                const data = await response.json();
+                const botReply = data.choices[0].message.content;
+
+                document.getElementById(loadingId).remove();
+
+                const rawHTML = marked.parse(botReply);
+        
+                // 2. Puliamo l'HTML con DOMPurify per bloccare eventuali script malevoli
+                const safeHTML = DOMPurify.sanitize(rawHTML);
+
+                // 3. Mostriamo la risposta dicendo alla funzione che è HTML (true)
+                addMessageToChat(safeHTML, "bot-message", true);
+                conversationHistory.push({ role: "assistant", content: botReply });
+
+                // LOG DI SUCCESSO: Utile per verificare che l'IA abbia risposto correttamente
+                console.log("[LOG INFO] Risposta ricevuta con successo dall'API.");
+
+                } catch (error) {
+                // LOG GLOBALE: Cattura e stampa i dettagli tecnici completi nella console
+                console.error("[LOG CRITICO] Dettaglio completo dell'errore:", error);
+                
+                const loadingElement = document.getElementById(loadingId);
+                if (loadingElement) loadingElement.remove();
+
+                let messaggioUtente = error.message;
+                
+                if (error.name === "TypeError") {
+                    messaggioUtente = "Errore di rete: Controlla la tua connessione a Internet e riprova.";
+                    // Log specifico per disconnessioni
+                    console.warn("[LOG RETE] Possibile disconnessione o blocco CORS riscontrato.");
+                }
+
+                // Mostra il messaggio "amichevole" all'utente nella chat
+                addMessageToChat(messaggioUtente, "bot-message");
+                
+            } finally {
+                //inputField.disabled = false;
+                document.getElementById("send-btn").disabled = false;
+                inputField.focus(); 
+            }
+        }
+
+        // Funzione di supporto per creare i "baloon" della chat nel DOM
+        function addMessageToChat(text, className, isHTML = false) {
+            const chatBox = document.getElementById("chat-box");
+            const messageDiv = document.createElement("div");
+            
+            messageDiv.classList.add("message", className);
+            
+            // Se è HTML (dal bot), usiamo innerHTML dopo averlo sanificato
+            // Se è testo normale (dall'utente o errori), usiamo textContent
+            if (isHTML) {
+                messageDiv.innerHTML = text;
+            } else {
+                messageDiv.textContent = text; 
+            }
+
+            const messageId = "msg-" + Date.now() + "-" + Math.floor(Math.random() * 1000000);
+            messageDiv.id = messageId;
+
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            return messageId;
+        }
+    </script>
+</body>
+</html>
